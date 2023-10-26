@@ -1,10 +1,12 @@
 import { PrismaClient } from "@prisma/client";
 import fastify from "fastify";
+import cors from '@fastify/cors'
 
 const app = fastify()
 
 const prisma = new PrismaClient()
 
+app.register(cors)
 interface PostDataUser {
   role: string;
   email: string;
@@ -18,7 +20,15 @@ interface PostDataPublication {
 
 app.get('/users/:userEmail', async (req) => {
   const { userEmail } = req.params as any
-  const user = await prisma.user.findUnique({where: userEmail})
+  const user = await prisma.user.findUniqueOrThrow({
+    where: {
+      email: userEmail,
+    },
+  })
+
+  if(user!) {
+
+  }
 
   return { user }
 })
@@ -26,22 +36,48 @@ app.get('/users/:userEmail', async (req) => {
 app.post('/users', async (req, reply) => {
   const { role, email } = req.body as PostDataUser;
 
-  await prisma.user.create({
+
+  const userExist = await prisma.user.findFirst({where: {
+    email
+  }});
+
+
+  if (userExist) return reply.status(201).send(userExist);
+
+  const user = await prisma.user.create({
     data: {
       role,
       email,
     }
   })
 
+  return reply.status(201).send(user);
+})
+
+app.put('/users/:userId', async (req, reply) => {
+  const { userId } = req.params as any;
+  const { role } = req.body as PostDataUser;
+
+  await prisma.user.update({
+    where: {
+      id: userId,
+    },
+    data: {
+      role,
+    }
+  })
+
   return reply.status(201).send();
 })
 
-app.get('/publications/:userId', async (req) => {
-  const { userId } = req.params as any;
+app.get('/publications/:email', async (req) => {
+  const { email } = req.params as any;
 
   const publications = await prisma.publication.findMany({
     where: {
-      userId
+      user: {
+        email
+      }
     }
   })
 
@@ -64,7 +100,7 @@ app.post('/publication/', async (req, reply) => {
     data: {
       title,
       post,
-      userId
+      user: { connect: { id: userId }}
     }
   })
 
@@ -75,5 +111,5 @@ app.listen({
   host: '0.0.0.0',
   port: process.env.PORT ? Number(process.env.PORT) : 3333,
 }).then(() => {
-  console.log('HTTP Server running')
+console.log('HTTP Server running')
 })
